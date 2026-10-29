@@ -1,0 +1,41 @@
+{
+  "keywords": [
+    "dog",
+    "cat",
+    "elephant"
+  ],
+  "min_sources": 3,
+  "interval_minutes": 5,
+  "lookback_hours": 24,
+  "story_window_hours": 48,
+  "similarity_threshold": 0.3,
+  "min_shared_terms": 2,
+  "renotify_new_sources": 3,
+  "max_alerts_per_scan": 10,
+  "request_delay_seconds": 2,
+  "retention_days": 30,
+  "blocked_domains": [
+    "facebook.com",
+    "instagram.com",
+    "x.com",
+    "twitter.com",
+    "youtube.com",
+    "tiktok.com",
+    "reddit.com",
+    "pinterest.com"
+  ],
+  "google_news": {
+    "hl": "en-US",
+    "gl": "US",
+    "ceid": "US:en"
+  },
+  "telegram": {
+    "token": "",
+    "chat_id": ""
+  },
+  "claude": {
+    "enabled": false,
+    "api_key": "",
+    "model": "claude-opus-5-5"
+  }
+}
