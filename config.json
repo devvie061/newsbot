@@ -2,7 +2,17 @@
   "keywords": [
     "dog",
     "cat",
-    "elephant"
+    "elephant",
+    "lion",
+    "tiger",
+    "giraffe",
+    "zebra",
+    "monkey",
+    "bear",
+    "turtle",
+    "raccoon",
+    "squirrel",
+    "deer"
   ],
   "min_sources": 3,
   "interval_minutes": 5,
