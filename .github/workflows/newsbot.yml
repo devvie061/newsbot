@@ -1,0 +1,95 @@
+# Lance NewsBot toutes les 5 minutes sur les serveurs de GitHub.
+# L'historique (base SQLite) est gardé sur la branche « data », la page
+# d'historique publique sur la branche « gh-pages ».
+name: NewsBot
+
+on:
+  schedule:
+    - cron: "2-59/5 * * * *"   # décalé de 2 min : le début d'heure est le plus encombré
+  workflow_dispatch:            # bouton « Run workflow » pour lancer à la main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: newsbot
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TZ: Europe/Paris   # heures affichées dans les alertes et l'historique
+      REPO_URL: https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
+      TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      NEWSBOT_HOME: ${{ github.workspace }}/data
+      NEWSBOT_CONFIG: ${{ github.workspace }}/app/config.json
+      NEWSBOT_HISTORY_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+    steps:
+      - name: Récupérer le code et l'historique
+        run: |
+          git config --global user.name "NewsBot"
+          git config --global user.email "newsbot@users.noreply.github.com"
+          git clone --quiet --depth 1 "$REPO_URL" app
+          if git ls-remote --exit-code --heads "$REPO_URL" data >/dev/null; then
+            git clone --quiet --depth 1 --branch data "$REPO_URL" data
+          else
+            git init --quiet -b data data
+          fi
+
+      - name: Installer Claude (seulement si une clé est fournie)
+        if: env.ANTHROPIC_API_KEY != ''
+        run: |
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet anthropic
+          echo "PY=$PWD/.venv/bin/python" >> "$GITHUB_ENV"
+
+      - name: Lire les commandes Telegram et chercher les actualités
+        id: scan
+        run: ${PY:-python3} app/newsbot.py once
+
+      - name: Sauvegarder l'historique
+        if: always()
+        run: |
+          cd data
+          [ -f newsbot.db ] || exit 0
+          git add newsbot.db history.html
+          # Un seul commit, remplacé à chaque passage : la branche ne grossit pas.
+          if git rev-parse --verify --quiet HEAD >/dev/null; then
+            git commit --quiet --amend -m "Données NewsBot"
+          else
+            git commit --quiet -m "Données NewsBot"
+          fi
+          git push --quiet --force "$REPO_URL" HEAD:data
+
+      - name: Enregistrer les mots-clés modifiés depuis Telegram
+        if: always()
+        run: |
+          cd app
+          git diff --quiet -- config.json && exit 0
+          git commit --quiet -m "Réglages modifiés depuis Telegram" config.json
+          git pull --quiet --rebase "$REPO_URL" "$GITHUB_REF_NAME"
+          git push --quiet "$REPO_URL" HEAD:"$GITHUB_REF_NAME"
+
+      - name: Publier la page d'historique
+        if: always()
+        continue-on-error: true
+        env:
+          ALERTS: ${{ steps.scan.outputs.alerts }}
+        run: |
+          [ -f data/history.html ] || exit 0
+          # Republié seulement après une alerte (ou si la page n'existe pas encore).
+          if [ "${ALERTS:-0}" = "0" ] && git ls-remote --exit-code --heads "$REPO_URL" gh-pages >/dev/null; then
+            exit 0
+          fi
+          mkdir site
+          cp data/history.html site/index.html
+          touch site/.nojekyll
+          cd site
+          git init --quiet -b gh-pages
+          git add -A
+          git commit --quiet -m "Historique NewsBot"
+          git push --quiet --force "$REPO_URL" HEAD:gh-pages
